@@ -2,6 +2,7 @@ import argparse
 import os
 import tensorflow as tf
 from graph_ssl.model import GraphSSL
+
 parser = argparse.ArgumentParser(description='')
 
 

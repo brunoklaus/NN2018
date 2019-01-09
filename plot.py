@@ -50,8 +50,8 @@ class vertexplotOpt(object):
 
 def plotGraph(X,W=None,vertex_opt = None,\
                plot_filename = str(datetime.datetime.now()) + ".png", online = False,\
-              title = "", plotsize = [1000,1000], preprocessing = None, plot_dim = 2,\
-            edge_width = 0.5, edge_color="black"):
+              interactive=False,title = "", plotsize = [1000,1000], preprocessing = None, plot_dim = 2,\
+            edge_width = 0.5):
     
     
         if plot_dim < 2 or plot_dim > 3:
@@ -133,9 +133,8 @@ def plotGraph(X,W=None,vertex_opt = None,\
         data = []
         
         if not W is None:
-            trace_edge = traceEdges(X=X, W=W,plot_dim=plot_dim, edge_width=edge_width,
-                        edge_color=edge_color)
-            data = [trace_edge]
+            trace_edge = traceEdges(X=X, W=W,plot_dim=plot_dim, edge_width=edge_width)
+            data = trace_edge
             
         trace_vertex = traceVertex(X=X, plot_dim=plot_dim, v_opt = vertex_opt)
         data += trace_vertex
@@ -151,7 +150,8 @@ def plotGraph(X,W=None,vertex_opt = None,\
             except plotly.exceptions.PlotlyRequestError:
                 print("Warning: Could not plot online")
                 
-        #pyoff.offline.plot(fig)
+        if interactive:
+            pyoff.offline.plot(fig)
         pio.write_image(fig,OUTPATH)
         print("Done!")  
 
@@ -241,82 +241,72 @@ def traceVertex(X,plot_dim, v_opt):
         
 
 
-def traceEdges(X,W,edge_color,plot_dim,edge_width = 0.0005):
+def traceEdges(X,W,plot_dim,edge_width):
         xe=[]
         ye=[]
         ze=[]
+        ce = []
+        trace=[]
+        
+        def flatten(x):
+            return(np.reshape(x,(-1)))
+        
         
         for i in np.arange(X.shape[0]):
 
             for j in np.arange(X.shape[0]):
-                
-                if W[i,j] + W[j,i] == 0: continue    
+                temp = W[i,j] + W[j,i]
+                if temp == 0: continue 
+                 
             
-                xe.extend([X[i,0],X[j,0]])# x-coordinates of edge ends
-                ye.extend([X[i,1],X[j,1]])# y-coordinates of edge ends
+                xe.append([X[i,0],X[j,0],None])# x-coordinates of edge ends
+                ye.append([X[i,1],X[j,1],None])# y-coordinates of edge ends
                 if plot_dim > 2:
-                    ze.extend([X[i,2],X[j,2]])# z-coordinates of edge ends
+                    ze.append([X[i,2],X[j,2],None])# z-coordinates of edge ends
+                ce.append(0.5*temp)
             
-        print(xe)
+
+        xe = np.array(xe)
+        ye = np.array(ye)
+        ze = np.array(ze)
+        ce = np.array(ce)
+        ids = np.argsort(ce)
+        ce = ce[ids]
+        xe = xe[ids]
+        ye = ye[ids]
+        if plot_dim > 2:
+            ze = ze[ids]
             
-        #Create 2D or 3D trace
-        if (plot_dim == 2):
-            trace=dict(x=xe,
-                       y=ye,
-                       type="scatter",
+        splt = [list(x) for x in np.array_split(np.arange(len(ce)),10)]
+        
+
+        
+        for x in splt:
+            col = max(20,255 - int(255*ce[x][0]))
+            col = 'rgb' + str( (col,col,col) ) if plot_dim == 2 else (col,col,col)
+            print(col)
+            new_edge = dict(x=flatten(xe[x]),
+                       y=flatten(ye[x]),
+                       type="scattergl",
                        mode='lines',
-                       line=dict(color='rgb(210,210,210)',
+                       line=dict(color = col,
                                   width=edge_width),
                        hoverinfo='none'
                        )
-        else:
-            trace=dict(x=xe,
-                       y=ye,
-                       z=ze,
-                       type="scatter3d",
-                       mode='lines',
-                       line=dict(color=edge_color,
-                                  width=edge_width),
-                       hoverinfo='none'
-                       )
+            if plot_dim == 3:
+                new_edge["z"] = flatten(ze[x])
+                new_edge["type"] = "scatter3d"
+            trace.append(new_edge)
+            
         return(trace)
         
         
-def getEdgeColorScale(W,edge_colorscale_range = ["0to1","relative","constant"][0]):
-        ce = []
 
-        for i in np.arange(W.shape[0]):
-            for j in np.arange(W.shape[1]):
-                if i < j: continue  
-                ce += 2*[W[i,j] + W[j,i]] #color of edge:
-                
-  
-        #Create Scaling for edges based on strength
-        num_scales = 1000
-        
-        
-        pal_E = ig.GradientPalette("white", "black", num_scales)
-        ce_max = np.max(ce)
-        ce_min = np.min(ce)
-        if edge_colorscale_range == "0to1":
-            if ce_max > 1 or ce_min < 0:
-                raise ValueError("Edge strength falls outside [0,1] range")
-            colors = [pal_E.get(int(np.round(num_scales*ce[k]))) for k,_ in enumerate(ce)]
-        elif edge_colorscale_range == "relative":
-            if ce_max == ce_min:
-                colors = "black"
-            else:
-                colors = [pal_E.get(int(np.round(num_scales*(ce[k]-ce_min)/(ce_max-ce_min)))) for k,_ in enumerate(ce)]
-        else:
-            colors = "black"
-            
-        return (colors)
         
 def color_scale_discrete(Y,palette="bright"):
     Y = Y - np.min(Y) 
     pal = sns.color_palette(palette,2)
     res = np.array(list(map(lambda k: (pal[int(k)]),Y)))
-    print(res.shape)
     return(res)
 
 def color_scale_continuous(Y,palette="coolwarm",num_palette=70):
@@ -333,3 +323,4 @@ def color_scale_continuous(Y,palette="coolwarm",num_palette=70):
     
 def vertex_name(Y):
     return(["Class" + str(x) for x in Y])
+    

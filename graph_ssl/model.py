@@ -2,6 +2,8 @@
 import toy_datasets as toyds
 import plot as plt
 import numpy as np
+
+from graph_ssl.gssl_affmat import AffMatGenerator
 class GraphSSL(object):
     
     def __init__(self, sess, args):
@@ -17,11 +19,13 @@ class GraphSSL(object):
     def train(self):
         num_samples = self.dataset["Y"].shape[0]
         vertex_opt = plt.vertexplotOpt(Y=self.dataset["Y"],
-                                        mode="constant",size=6)
+                                        mode="constant",size=2)
         
-        W = np.random.random_integers(0,10000,np.square(num_samples))
-        W[np.where(W < 10000)] = 0
-        W = np.reshape(W,(num_samples,num_samples))
+        
+        W = AffMatGenerator(sigma=1,k=10,mask_func="knn").generateAffMat(self.dataset["X"])
 
-        plt.plotGraph(self.dataset["X"],W=W,plot_dim=2, vertex_opt= vertex_opt)
+        
+
+        plt.plotGraph(self.dataset["X"],W=W,plot_dim=3, vertex_opt= vertex_opt,edge_width=1,\
+                      interactive = True)
         
