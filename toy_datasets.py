@@ -11,7 +11,7 @@ def getDataframe(ds_name):
     
     X = pd.read_csv(path_X,sep=",",index_col=0,header=0)
     Y = pd.read_csv(path_Y,sep=",",index_col=0,header=0)
-    return {"X":X.values,"Y":np.reshape(Y.values,(-1))}
+    return {"X":X.values,"Y":np.reshape(Y.values,(-1)) - 1}
 
 def getTFDataset(ds_name):
     df = getDataframe(ds_name)

@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import sklearn.preprocessing as skpp
 
 PLOT_PATH = "./plots/"
 plotly.tools.set_credentials_file(username='isonettv', api_key='2Lg1USMkZAHONqo82eMG')
@@ -17,11 +18,17 @@ plotly.tools.set_credentials_file(username='isonettv', api_key='2Lg1USMkZAHONqo8
 
 class vertexplotOpt(object):
     
-    DEFAULT_CONSTANT_COLOR = (255*np.array([0,0.5,0])).astype(np.int64)
+    DEFAULT_CONSTANT_COLOR = (255*np.array([0,0,0])).astype(np.int64)
+    DEFAULT_UNLABELED_COLOR = (255*np.array([0,0.5,0])).astype(np.int64)
     
-    def __init__(self,Y, mode = "discrete", palette = None, size = 1.5):
+    
+    def __init__(self,Y, mode = "discrete", palette = None, size = 1.5,\
+                 labeledIndexes = None):
         self.mode = mode
-        self.size = size
+        self.values = np.array(Y)
+        
+        if np.array(size).shape == ():
+            self.size = np.repeat(size,Y.shape[0])
         
         if palette == None:
             if mode == "discrete":
@@ -32,27 +39,29 @@ class vertexplotOpt(object):
         if mode == "discrete":
             self.color_var  = color_scale_discrete(Y, palette)
             self.color_scale = None
-            self.values = Y
             self.group_var = np.array(Y)
-                
             self.names = vertex_name(Y)
         elif mode == "continuous":
             self.color_var  = np.array(color_scale_continuous(Y, palette))
             self.color_scale = color_scale_continuous(np.linspace(0,1,10), palette)
             self.color_scale = [[y,"rgb"+str(tuple(x[0:3]))] for x,y in zip(self.color_scale,np.linspace(0,1,10))]
-            self.values = Y
             self.names = [str(x) for x in Y]
         elif mode == "constant":
             self.color_var  = np.repeat([vertexplotOpt.DEFAULT_CONSTANT_COLOR],len(Y),axis=0)
             self.color_scale = None
-            self.values = Y
-            
+        if not labeledIndexes is None:
+            self.color_var[np.logical_not(labeledIndexes)] = vertexplotOpt.DEFAULT_UNLABELED_COLOR
+            self.values[np.logical_not(labeledIndexes)] = -1
+            self.size[np.logical_not(labeledIndexes)] = 0.5*self.size[np.logical_not(labeledIndexes)]
+            if mode == "discrete":
+                self.group_var[np.logical_not(labeledIndexes)] = -1
 
-def plotGraph(X,W=None,vertex_opt = None,\
-               plot_filename = str(datetime.datetime.now()) + ".png", online = False,\
-              interactive=False,title = "", plotsize = [1000,1000], preprocessing = None, plot_dim = 2,\
-            edge_width = 0.5):
+def plotGraph(X,W=None,vertex_opt = None,plot_filename = None, online = False,
+              interactive=False,title = "", plotsize = [1000,1000], preprocessing = None, 
+            plot_dim = 2, edge_width = 0.5):
     
+        if plot_filename is None:
+            plot_filename = str(datetime.datetime.now()) + ".png"
     
         if plot_dim < 2 or plot_dim > 3:
             raise ValueError("plot_dim must be either 2 or 3")    
@@ -187,12 +196,14 @@ def traceVertex(X,plot_dim, v_opt):
                        x=flatten(X[l_ids,0]),
                        y=flatten(X[l_ids,1]),
                        z = None if plot_dim == 2 else flatten(X[l_ids,2]),
-                       name=str(l),
+                       name=vertex_name([v_opt.values[l_ids][0]])[0],
+                       text = vertex_name(v_opt.values[l_ids]),
                        mode='markers',
                        marker=dict(symbol='circle',
-                                     size=v_opt.size,
+                                     size=v_opt.size[l_ids],
                                      color=v_opt.color_var[l_ids],
                                      line=dict(color='rgb(50,50,50)', width=0.1),
+
                                      ),
                        hoverinfo='text')
                 call_dicts += [l_dict]
@@ -206,7 +217,7 @@ def traceVertex(X,plot_dim, v_opt):
                        mode='markers',
                        showlegend = True,
                        marker=dict(symbol='circle',
-                                     size=v_opt.size,
+                                     size=v_opt.size[l_ids],
                                      color=v_opt.color_var,
                                      line=dict(color='rgb(50,50,50)', width=0.1),
                                      ),
@@ -218,6 +229,7 @@ def traceVertex(X,plot_dim, v_opt):
             if plot_dim == 2:
                 call_dict.pop("z")
                 call_dict["marker"]["color"] = ["rgb"+str(tuple(x)) for x in call_dict["marker"]["color"]]
+                #print(call_dict["marker"]["color"])
                 call_dict["text"] = [str(x) for x in v_opt.values]
                 call_dict["type"] = "scattergl"    
             else:
@@ -229,7 +241,6 @@ def traceVertex(X,plot_dim, v_opt):
             if v_opt.mode == "continuous":
                 #Add color scale
                 call_dict["marker"]["colorscale"] = v_opt.color_scale 
-                print(v_opt.color_scale)
                 call_dict["marker"]["cmax"] = np.max(v_opt.values)
                 call_dict["marker"]["cmin"] = np.min(v_opt.values)
                 call_dict["marker"]["colorbar"] = dict(title="scale")
@@ -265,13 +276,14 @@ def traceEdges(X,W,plot_dim,edge_width):
                     ze.append([X[i,2],X[j,2],None])# z-coordinates of edge ends
                 ce.append(0.5*temp)
             
-
+        
+        
         xe = np.array(xe)
         ye = np.array(ye)
         ze = np.array(ze)
         ce = np.array(ce)
         ids = np.argsort(ce)
-        ce = ce[ids]
+        ce = np.linspace(0,1,ce.shape[0])
         xe = xe[ids]
         ye = ye[ids]
         if plot_dim > 2:
@@ -280,15 +292,16 @@ def traceEdges(X,W,plot_dim,edge_width):
         splt = [list(x) for x in np.array_split(np.arange(len(ce)),10)]
         
 
-        
+        max_brightness = 210
         for x in splt:
-            col = max(20,255 - int(255*ce[x][0]))
+            
+            col = max_brightness - int(max_brightness*ce[x][0])
             col = 'rgb' + str( (col,col,col) ) if plot_dim == 2 else (col,col,col)
-            print(col)
             new_edge = dict(x=flatten(xe[x]),
                        y=flatten(ye[x]),
                        type="scattergl",
                        mode='lines',
+                       showlegend=False,
                        line=dict(color = col,
                                   width=edge_width),
                        hoverinfo='none'
@@ -305,8 +318,8 @@ def traceEdges(X,W,plot_dim,edge_width):
         
 def color_scale_discrete(Y,palette="bright"):
     Y = Y - np.min(Y) 
-    pal = sns.color_palette(palette,2)
-    res = np.array(list(map(lambda k: (pal[int(k)]),Y)))
+    pal = sns.color_palette(palette,np.max(Y)+1)
+    res = 255*np.array(list(map(lambda k: (pal[int(k)]),Y)))
     return(res)
 
 def color_scale_continuous(Y,palette="coolwarm",num_palette=70):
@@ -322,5 +335,5 @@ def color_scale_continuous(Y,palette="coolwarm",num_palette=70):
 
     
 def vertex_name(Y):
-    return(["Class" + str(x) for x in Y])
+    return(["Class" + str(x) if x != -1 else "unlabeled" for x in Y])
     
