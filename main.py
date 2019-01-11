@@ -6,8 +6,8 @@ from graph_ssl.model import GraphSSL
 parser = argparse.ArgumentParser(description='')
 
 
-parser.add_argument('--dataset', dest='dataset', default='COIL2', help='chosen dataset')
-parser.add_argument('--split_test', dest='split_test', type=float, default= 100/1500, help='Percent of dataset to be used for testing')
+parser.add_argument('--dataset', dest='dataset', default='spiral_hard', help='chosen dataset')
+parser.add_argument('--split_test', dest='split_test', type=float, default= 10/1500, help='Percent of dataset to be used for testing')
 parser.add_argument('--can_plot', dest='can_plot', type=bool, default=True, help='enable plotting ops')
 
 args = parser.parse_args()  

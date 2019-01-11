@@ -7,8 +7,23 @@ from sklearn.preprocessing import StandardScaler
 def deg_matrix(W):
     return(np.diag(np.sum(W,axis=0)))
 
+def lap_matrix(W,is_normalized):
+
+    if is_normalized:
+            d_sqrt = np.reciprocal(np.sqrt(np.sum(W,axis=0)))
+            d_sqrt[np.logical_not(np.isfinite(d_sqrt))] = 1
+            d_sqrt = np.diag(d_sqrt)
+            I = np.identity(W.shape[0])
+            S = np.matmul(d_sqrt,np.matmul(W,d_sqrt))
+            I = np.identity(W.shape[0])
+            return( I - S )
+    else:
+        return( deg_matrix(W - W) )
+
+
 def init_matrix(Y,labeledIndexes):
-    Y = Y - np.min(Y)
+    Y = np.copy(Y)
+    Y = np.array(Y) - np.min(Y)
     M = np.max(Y)   
     def one_hot(x):
         oh = np.zeros((M+1))
@@ -44,3 +59,19 @@ def get_PCA(X):
 
 def get_Standardized(X):
     return(StandardScaler().fit_transform(X))
+
+
+def calc_Z(Y, labeledIndexes,D,estimatedFreq=None):
+            if estimatedFreq is None:
+                estimatedFreq = np.repeat(1,Y.shape[0])
+            if Y.ndim == 1:
+                Y = init_matrix(Y,labeledIndexes)
+            
+            Z = np.array(Y)
+            for i in np.where(labeledIndexes == True)[0]:
+                
+                Z[i,np.argmax(Y[i,:])] = D[i]
+                
+            for i in np.arange(Y.shape[1]):
+                Z[:,i] = (Z[:,i] / np.sum(Z[:,i])) * estimatedFreq[i]
+            return(Z)

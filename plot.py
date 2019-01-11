@@ -152,7 +152,7 @@ def plotGraph(X,W=None,vertex_opt = None,plot_filename = None, online = False,
         fig=go.Figure(data=data, layout=layout)
         
         
-        print("Plotting graph...")
+        print("Plotting graph..." + title)
         if online:
             try:
                 py.iplot(fig)

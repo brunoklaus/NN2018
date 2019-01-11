@@ -14,7 +14,6 @@ class AffMatGenerator(object):
         W =  np.reshape([0 if x == 0 else self.dist_func(x) for x in  np.reshape(K,(-1))],K.shape)
         print("Done!")
         assert(W.shape == (K.shape))
-        print(W)
         return(W)
 
     
