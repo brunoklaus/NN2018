@@ -2,13 +2,14 @@
 import toy_datasets as toyds
 import plot as plt
 import numpy as np
-import graph_ssl.gssl_utils as gutils
+import gssl_utils as gutils
 import pandas as pd
 
-from graph_ssl.gssl_affmat import AffMatGenerator
+from gssl_affmat import AffMatGenerator
 from sklearn.ensemble import RandomForestClassifier
-from cProfile import label
-from graph_ssl.gssl_utils import calc_Z
+from gssl_utils import calc_Z
+
+
 
 class GraphSSL(object):
     
@@ -145,7 +146,7 @@ class GraphSSL(object):
     
     def experiment_LDST(self,X_transformed,Y,W,labeledIndexes, mu = 99.0, tuning_iter=2, plot=True):        
         classif_LDST, Y_tuned, l_tuned = self.LDST(W=W, Y=Y, mu=mu, labeledIndexes=labeledIndexes,tuning_iter=tuning_iter)
-        classif_LDST = gutils.get_argmax(classif_LDST)
+        classif_LDST = np.argmax(classif_LDST,axis=1)
         
         if self.can_plot and plot:
             ''' PLOT Tuned Y '''   
@@ -163,7 +164,7 @@ class GraphSSL(object):
         
     
     def experiment_LGC(self,X_transformed,Y,W,labeledIndexes, alpha = 0.9, plot=True):        
-        classif_LGC = gutils.get_argmax(self.LGC(W=W, Y=Y, labeledIndexes=labeledIndexes, alpha=alpha))
+        classif_LGC = np.argmax(self.LGC(W=W, Y=Y, labeledIndexes=labeledIndexes, alpha=alpha),axis=1)
         
         if self.can_plot and plot:                
             vertex_opt = plt.vertexplotOpt(Y=classif_LGC,mode="discrete",size=7)
@@ -201,7 +202,7 @@ class GraphSSL(object):
     def train(self):
         Y = self.dataset["Y"]
         X = gutils.get_Standardized(self.dataset["X"])
-        W = AffMatGenerator(sigma=0.1,k=10,mask_func="knn",dist_func="gaussian").generateAffMat(X)
+        W = AffMatGenerator(sigma=0.005,k=20,mask_func="knn",dist_func="constant").generateAffMat(X)
         
         labeledIndexes = gutils.split_indices(Y, self.split_test)
         
@@ -212,14 +213,17 @@ class GraphSSL(object):
         
         Y_old = np.copy(Y)
                 
-        acc_LDST = self.experiment_LDST(X_transformed, Y, W, labeledIndexes, mu = 99.0, tuning_iter = 0)
-        print("Accuracy LDST:{}".format(acc_LDST))
+       
         
         acc_LGC = self.experiment_LGC(X_transformed, Y, W, labeledIndexes, alpha = 0.8)
         print("Accuracy LGC:{}".format(acc_LGC))
+        
+        
+        acc_LDST = self.experiment_LDST(X_transformed, Y, W, labeledIndexes, mu = 99.0, tuning_iter = 0)
+        print("Accuracy LDST:{}".format(acc_LDST))
 
-        acc_RF = self.experiment_RF(X, X_transformed, Y, W, labeledIndexes)
-        print("Accuracy RF:{}".format(acc_RF))
+        #acc_RF = self.experiment_RF(X, X_transformed, Y, W, labeledIndexes)
+        #print("Accuracy RF:{}".format(acc_RF))
             
         assert(np.all(Y_old == Y))
         

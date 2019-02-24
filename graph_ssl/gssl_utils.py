@@ -33,12 +33,17 @@ def init_matrix(Y,labeledIndexes):
     Y_0[labeledIndexes,:] = [one_hot(x) for x in Y[labeledIndexes]]
     return(Y_0)
 
-def get_argmax(Y):
+def init_matrix_argmax(Y):
     return(np.argmax(Y,axis=1))
 
-
+'''
+    Returns a percentage p of indices, using stratification
+    @param Y the vector from which to split with stratification
+    @param split_p the percentage of stratified indexes to return
+    @return split_p percent of stratified indexes
+'''
 def split_indices(Y,split_p = 0.5):
-    index_train, index_test  = skmm.train_test_split(np.arange(Y.shape[0]),
+    index_train, _  = skmm.train_test_split(np.arange(Y.shape[0]),
                                                      stratify=Y,test_size=1-split_p)
     b = np.zeros((Y.shape[0]),dtype=np.bool)
     b[index_train] = True

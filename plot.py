@@ -262,7 +262,6 @@ def traceEdges(X,W,plot_dim,edge_width):
         def flatten(x):
             return(np.reshape(x,(-1)))
         
-        
         for i in np.arange(X.shape[0]):
 
             for j in np.arange(X.shape[0]):
@@ -283,14 +282,20 @@ def traceEdges(X,W,plot_dim,edge_width):
         ze = np.array(ze)
         ce = np.array(ce)
         ids = np.argsort(ce)
-        ce = np.linspace(0,1,ce.shape[0])
+        if np.max(ce) == np.min(ce):
+            ce = np.linspace(0.5,0.5,ce.shape[0])
+        else:
+            ce = np.linspace(0,1,ce.shape[0])
         xe = xe[ids]
         ye = ye[ids]
         if plot_dim > 2:
             ze = ze[ids]
-            
+        
+       
+        
         splt = [list(x) for x in np.array_split(np.arange(len(ce)),10)]
         
+
 
         max_brightness = 210
         for x in splt:
