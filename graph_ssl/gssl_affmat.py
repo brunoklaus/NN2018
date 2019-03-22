@@ -9,6 +9,24 @@ import progressbar
 class AffMatGenerator(object):
     
     
+    def generateMask(self,X):
+        print("Creating Affinity Mask...")
+        if self.dist_func_str == "LNP" or self.dist_func_str == "NLNP":
+            K = self.mask_func(X)
+            K[K > 0] = 1
+        else:
+            K = self.mask_func(X)
+        return(K)
+    
+    def affMatFromMask(self,K):
+        print("Creating Affinity Matrix...")
+        if self.dist_func_str == "LNP" or self.dist_func_str == "NLNP":
+            raise "ERROR: LNP does not support affMatFromMask"
+        else:
+            W =  np.reshape([0 if x == 0 else self.dist_func(x) for x in  np.reshape(K,(-1))],K.shape)
+        print("Done!")
+        return(W)
+    
     def generateAffMat(self,X):
         print("Creating Affinity Matrix...")
         if self.dist_func_str == "LNP" or self.dist_func_str == "NLNP":
@@ -22,7 +40,7 @@ class AffMatGenerator(object):
         return(W)
 
     
-    def __init__(self, dist_func= "gaussian", mask_func="eps", metric="euclidean",**arg):
+    def __init__(self, dist_func= "gaussian", mask_func="knn", metric="euclidean",**arg):
             self.metric = metric
             self.dist_func_str = dist_func
             

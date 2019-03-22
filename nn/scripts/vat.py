@@ -576,7 +576,7 @@ def go(_):
                             
                     
  
-def main(_):
+def runSetOfExperiments(_):
     go(None)
 
 

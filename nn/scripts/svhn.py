@@ -128,7 +128,7 @@ def inputs(batch_size,label_seed=1,val_seed=1):
         val_l = dataset_val_l,
         val_u = dataset_val_u)
 
-def main(argv):
+def runSetOfExperiments(argv):
     prepare_dataset()
 
 

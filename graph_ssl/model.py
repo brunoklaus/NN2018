@@ -4,15 +4,38 @@ import plot as plt
 import numpy as np
 import gssl_utils as gutils
 import pandas as pd
-
+import time
 from gssl_affmat import AffMatGenerator
 from sklearn.ensemble import RandomForestClassifier
 from gssl_utils import calc_Z
-
-
+from reportlab.lib.validators import isInstanceOf
+from sklearn.datasets import make_blobs, make_moons
+from math import sqrt
 
 class GraphSSL(object):
-    
+    def __init__(self,  args):
+        self.args = args
+        self.can_plot = args["can_plot"]
+
+        
+        if self.args["dataset"] == "gaussian":
+            ds_x,ds_y =  make_blobs(n_samples=1000, n_features=2,\
+                                    centers=[[0,0],[sqrt(2),sqrt(2)]], cluster_std=self.args["dataset_sd"],\
+                                     shuffle=True)
+            self.dataset = {"X":ds_x,"Y":ds_y}
+        elif self.args["dataset"] == "spiral" and "dataset_sd" in self.args:
+            ds_x,ds_y =  make_moons(n_samples=1000,noise=self.args["dataset_sd"],\
+                                     shuffle=True)
+            self.dataset = {"X":ds_x,"Y":ds_y}
+            
+        else:
+            self.dataset = toyds.getDataframe(args["dataset"])
+
+        if self.dataset["X"].shape[1] > 3:
+            self.transformed_dataset = gutils.get_Isomap(self.dataset["X"], 10)
+        else:
+            self.transformed_dataset = self.dataset
+        self.transformed_dataset = gutils.get_Standardized(self.transformed_dataset["X"])
     
     def LGC(self,W,Y,labeledIndexes, alpha = 0.1):
         Y = np.copy(Y)
@@ -32,7 +55,9 @@ class GraphSSL(object):
         return(np.matmul(np.linalg.inv(I - alpha*S),Y))
     
     def LDST(self,W,Y,labeledIndexes,mu = 99.0,useEstimatedFreq=True,total_iter = None,tuning_iter = 0,
-             flip_same_class=False):
+             constant_prop=False):
+        
+        
         Y_old = np.copy(Y)
         labeledIndexes_old = np.copy(labeledIndexes)
         
@@ -74,11 +99,10 @@ class GraphSSL(object):
             total_iter = num_unlabeled
         else:
             total_iter = min(total_iter,num_unlabeled)
-        
+        assert total_iter + tuning_iter > tuning_iter
         for i in np.arange(total_iter + tuning_iter):
             is_tuning = (i < tuning_iter)
-            if is_tuning:
-                continue
+            
             
             if i == tuning_iter:
                 Y_tuned = np.array(Y)
@@ -87,7 +111,8 @@ class GraphSSL(object):
             '''Z matrix - The binary values of current Y are replaced with their corresponding D entries.
                 Then, we normalize each row so that row sums to its estimated influence
             '''
-            Z = gutils.calc_Z(Y, labeledIndexes, D, estimatedFreq)
+            Z = gutils.calc_Z(Y, labeledIndexes, D, estimatedFreq,reciprocal=False)
+
             #Compute graph gradient
             Q = np.matmul(A,Z)
             
@@ -107,8 +132,8 @@ class GraphSSL(object):
                 
             Q[labeledIndexes,:] = np.inf
             #Find minimum unlabeled index
-            if is_tuning and flip_same_class:
-                id_min_line = np.argmin(np.reshape(Q[:,id_max_col], (Q.shape[0],1)))
+            if is_tuning and constant_prop:
+                id_min_line = np.argmin(Q[:,id_max_col])
                 id_min_col = id_max_col
             else:
                 id_min = np.argmin(Q)
@@ -131,24 +156,48 @@ class GraphSSL(object):
         else:
             return P@Z, Y_old, labeledIndexes_old
             
-    def __init__(self, sess, args):
-        self.sess = sess
-        self.args = args
-        self.can_plot = args.can_plot
-        self.split_test = args.split_test
+    def LP(self,W,Y,labeledIndexes):
+        Y = np.copy(Y)
+        if Y.ndim == 1:
+            Y[np.logical_not(labeledIndexes)] = 0
+            Y = gutils.init_matrix(Y,labeledIndexes)
+        if not W.shape[0] == Y.shape[0]:
+            raise ValueError("W,Y shape not compatible")
         
-        self.dataset = toyds.getDataframe(args.dataset)
+        u = np.reshape(np.array(np.where(np.logical_not(labeledIndexes))),(-1))
+        l = np.reshape(np.array(np.where(labeledIndexes)),(-1))
         
+        d_inv = np.reciprocal(np.sum(W,axis=0))
+        d_inv[np.logical_not(np.isfinite(d_inv))] = 1
+        d_inv = np.diag(d_inv)
+        
+        P  = d_inv @ W
+        
+        I = np.identity(Y.shape[0] - sum(labeledIndexes))
+        
+        P_ul = P[u[:, None],l]
+        P_uu = P[u[:, None],u]
+        
+        Y[u,:] = np.linalg.inv(I - P_uu) @ P_ul @ Y[l,:]
+        return(Y)
     
     def build_model(self):
         return None
     
     
-    def experiment_LDST(self,X_transformed,Y,W,labeledIndexes, mu = 99.0, tuning_iter=2, plot=True):        
-        classif_LDST, Y_tuned, l_tuned = self.LDST(W=W, Y=Y, mu=mu, labeledIndexes=labeledIndexes,tuning_iter=tuning_iter)
+    def experiment_LDST(self,X_transformed,Y,W,labeledIndexes, mu = 99.0, tuning_iter=2, plot=True,Y_noisy=None):
+        
+        if Y_noisy is None:
+            Y_noisy = Y
+                
+        classif_LDST, Y_tuned, l_tuned = self.LDST(W=W, Y=Y_noisy, mu=mu, labeledIndexes=labeledIndexes,tuning_iter=tuning_iter)
         classif_LDST = np.argmax(classif_LDST,axis=1)
         
-        if self.can_plot and plot:
+        
+        
+        
+        
+        if self.args["can_plot"] and plot:
             ''' PLOT Tuned Y '''   
             vertex_opt = plt.vertexplotOpt(Y=Y_tuned,mode="discrete",size=7,labeledIndexes=l_tuned)
             plt.plotGraph(X_transformed,plot_dim=2,W=W, vertex_opt= vertex_opt,edge_width=1,\
@@ -158,75 +207,117 @@ class GraphSSL(object):
             plt.plotGraph(X_transformed,plot_dim=2,W=W, vertex_opt= vertex_opt,edge_width=1,\
                           interactive = False,title="LDST result")
         
-        acc = gutils.accuracy_unlabeled(classif_LDST, Y,labeledIndexes)
+        acc = gutils.accuracy(classif_LDST, Y)
         
         return acc
         
-    
-    def experiment_LGC(self,X_transformed,Y,W,labeledIndexes, alpha = 0.9, plot=True):        
-        classif_LGC = np.argmax(self.LGC(W=W, Y=Y, labeledIndexes=labeledIndexes, alpha=alpha),axis=1)
+    def experiment_LGC(self,X_transformed,Y,W,labeledIndexes, alpha = 0.9, plot=True,Y_noisy=None ):  
+        if Y_noisy is None:
+            Y_noisy = Y      
+        classif_LGC = np.argmax(self.LGC(W=W, Y=Y_noisy, labeledIndexes=labeledIndexes, alpha=alpha),axis=1)
         
-        if self.can_plot and plot:                
+        if self.args["can_plot"] and plot:                
             vertex_opt = plt.vertexplotOpt(Y=classif_LGC,mode="discrete",size=7)
             plt.plotGraph(X_transformed,plot_dim=2,W=W, vertex_opt= vertex_opt,edge_width=1,\
                           interactive = False,title="LGC result")
         
-        acc = gutils.accuracy_unlabeled(classif_LGC, Y,labeledIndexes)
+        acc = gutils.accuracy(classif_LGC, Y)
         return acc
         
-    def plot_labeled_indexes(self,X_transformed,Y,W,labeledIndexes):  
+
+    def experiment_LP(self,X_transformed,Y,W,labeledIndexes, plot=True,Y_noisy=None ):  
+        if Y_noisy is None:
+            Y_noisy = Y      
+        classif_LP = np.argmax(self.LP(W=W, Y=Y_noisy, labeledIndexes=labeledIndexes),axis=1)
+        
+        if self.args["can_plot"] and plot:                
+            vertex_opt = plt.vertexplotOpt(Y=classif_LP,mode="discrete",size=7)
+            plt.plotGraph(X_transformed,plot_dim=2,W=W, vertex_opt= vertex_opt,edge_width=1,\
+                          interactive = False,title="LP result")
+        
+        acc = gutils.accuracy(classif_LP, Y)
+        return acc
+    
+    def experiment_RF(self,X,X_transformed,Y,W,labeledIndexes, plot=True,Y_noisy=None):
+        if Y_noisy is None:
+            Y_noisy = Y
+
+        #RF Classifier
+        rf = RandomForestClassifier(n_estimators=100).fit(X[labeledIndexes,:],Y_noisy[labeledIndexes])
+        rf_pred = np.array(rf.predict(X))
+        if self.args["can_plot"] and plot:                
+            vertex_opt = plt.vertexplotOpt(Y=rf_pred,mode="discrete",size=7)
+            plt.plotGraph(X_transformed,plot_dim=2,W=W, vertex_opt= vertex_opt,edge_width=1,\
+                          interactive = False,title="RF result")
+        acc = gutils.accuracy(rf_pred, Y)
+        return acc    
+        
+        
+    def plot_labeled_indexes(self,X_transformed,Y,W,labeledIndexes,title="labeled indexes"):  
         #Plot 1: labeled indexes
-        if self.can_plot:          
+        if self.args["can_plot"]:       
+            
             vertex_opt = plt.vertexplotOpt(Y=Y,mode="discrete",size=7,labeledIndexes=labeledIndexes)
             plt.plotGraph(X_transformed,plot_dim=2,W=W, vertex_opt= vertex_opt,edge_width=1,\
-                          interactive = False,title="labeled indexes")
+                          interactive = False,title=title)
             
+            
+    
+    
     def plot_true_classif(self,X_transformed,Y,W):
         #Plot 2: True classif
-        if self.can_plot:          
+        if self.args["can_plot"]:          
             vertex_opt = plt.vertexplotOpt(Y=Y,mode="discrete",size=7)
             plt.plotGraph(X_transformed,plot_dim=2,W=W, vertex_opt= vertex_opt,edge_width=1,\
                           interactive = False,title="True classes")
 
-    def experiment_RF(self,X,X_transformed,Y,W,labeledIndexes):
-        #RF Classifier
-        rf = RandomForestClassifier(n_estimators=100).fit(X[labeledIndexes,:],Y[labeledIndexes])
-        rf_pred = np.array(rf.predict(X))
-        if self.can_plot:                
-            vertex_opt = plt.vertexplotOpt(Y=rf_pred,mode="discrete",size=7)
-            plt.plotGraph(X_transformed,plot_dim=2,W=W, vertex_opt= vertex_opt,edge_width=1,\
-                          interactive = False,title="RF result")
-        acc = gutils.accuracy_unlabeled(rf_pred, Y,labeledIndexes)
-        return acc
-            
-    def train(self):
-        Y = self.dataset["Y"]
+    
+    
+    def getAffMatrix(self):
         X = gutils.get_Standardized(self.dataset["X"])
-        W = AffMatGenerator(sigma=0.005,k=20,mask_func="knn",dist_func="constant").generateAffMat(X)
-        
-        labeledIndexes = gutils.split_indices(Y, self.split_test)
-        
-        if X.shape[1] > 3:
-            X_transformed  =  gutils.get_Isomap(X, 5)
-        else:
-            X_transformed = X
-        
-        Y_old = np.copy(Y)
                 
-       
+        affmat_dict = dict()
+        for k,v in self.args.items():
+            if k.startswith("aff_"):
+                affmat_dict[k[4:]] = v
+    
+        W = AffMatGenerator(**affmat_dict).generateAffMat(X)
+        return(W)
         
-        acc_LGC = self.experiment_LGC(X_transformed, Y, W, labeledIndexes, alpha = 0.8)
-        print("Accuracy LGC:{}".format(acc_LGC))
-        
-        
-        acc_LDST = self.experiment_LDST(X_transformed, Y, W, labeledIndexes, mu = 99.0, tuning_iter = 0)
-        print("Accuracy LDST:{}".format(acc_LDST))
-
-        #acc_RF = self.experiment_RF(X, X_transformed, Y, W, labeledIndexes)
-        #print("Accuracy RF:{}".format(acc_RF))
             
-        assert(np.all(Y_old == Y))
+    def train(self,W=None):
+        Y = self.dataset["Y"]
+        labeledIndexes = gutils.split_indices(Y, self.args["labeled_percent"])
         
+        Y_noisy = gutils.apply_uniform_noise_deterministic(self.dataset["Y"],labeledIndexes,self.args["corruption_level"])
+        
+        if "tuning_iter" in self.args.keys():
+            self.args["tuning_iter"] = int(self.args["tuning_iter"] * self.args["corruption_level"] * self.args["labeled_percent"] * Y.shape[0])
+
+        
+        if W is None:
+            W = self.getAffMatrix()
+                
+        
+        self.plot_labeled_indexes(self.transformed_dataset, self.dataset["Y"], W, labeledIndexes)
+        self.plot_labeled_indexes(self.transformed_dataset, Y_noisy, W, labeledIndexes,title="noisy Y")
+        
+        switcher = {
+            "LGC": lambda :  self.experiment_LGC(self.transformed_dataset, Y, W, labeledIndexes, alpha = self.args["alpha"],\
+                                                 plot=self.args["can_plot"],Y_noisy =Y_noisy),
+            "GTAM":lambda: self.experiment_LDST(self.transformed_dataset,Y,W,labeledIndexes, mu = self.args["mu"], tuning_iter=0, \
+                                                plot=self.args["can_plot"],Y_noisy=Y_noisy),
+            "LDST":lambda: self.experiment_LDST(self.transformed_dataset,Y,W,labeledIndexes, mu = self.args["mu"], tuning_iter= self.args["tuning_iter"],\
+                                                 plot=self.args["can_plot"],Y_noisy=Y_noisy),
+            "RF": lambda :  self.experiment_RF(self.dataset["X"],self.transformed_dataset, Y, W, labeledIndexes,plot=self.args["can_plot"],Y_noisy=Y_noisy),\
+            
+            "LP": lambda: self.experiment_LP(self.transformed_dataset, Y, W, labeledIndexes, plot=self.args["can_plot"], Y_noisy=Y_noisy)
+        }
+        start = time.time()
+        acc = switcher[self.args["algorithm"]]()
+        end = time.time()
+        print("Accuracy {}:{}".format(self.args["algorithm"],acc))
+        return {"acc":acc,"elapsed_time": (end-start)} 
          
         
 

@@ -212,7 +212,7 @@ def convert_sparse_Affmat(K,Ds,filepath):
         writer.write(example.SerializeToString())
     writer.close()
 
-def main(_):
+def runSetOfExperiments(_):
     #create_sparsemat(k=100,dirpath="../dataset/cifar10/AE_LR=0.00001.tfrecords",\
     #                 output_dir="../affmat/AE_LR=0.00001/k=100")
     #create_sparsemat(k=100,dirpath="../dataset/cifar10/AE_ZCA_LR=0.001.tfrecords",\

@@ -70,7 +70,7 @@ def build_training_graph(x, y, ul_x, lr, mom):
     train_op = opt.apply_gradients(grads_and_vars, global_step=tf.train.get_or_create_global_step())
     return loss, train_op
 
-def main(_):
+def runSetOfExperiments(_):
     
     g1 = tf.Graph()
     

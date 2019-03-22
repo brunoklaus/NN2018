@@ -1,1 +1,14 @@
+*.pyc
 /plots
+/vat_tf-master
+/nn/*
+!/nn/scripts
+
+/graph_ssl/*.csv
+/graph_ssl/results/*
+!/graph_ssl/results/joined
+
+
+/graph_ssl/plots_R/*
+/graph_ssl/plots/*
+

@@ -262,7 +262,7 @@ def autoencoder_run(_):
                         #END Eval Test data
                     ''' END EVAL'''
                         
-def main(_):
+def runSetOfExperiments(_):
     autoencoder_run(None)
 
 
